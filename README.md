@@ -1,16 +1,16 @@
 # cuflash
 
-> 📚 Portfolio map: https://github.com/open-infra-ai/open-infra-ai
+> 📚 Portfolio map: https://github.com/holtwood-systems/portfolio
 
 > **cuflash — 从零手写的 CUDA FlashAttention：标量 → WMMA Tensor Core 前向、FlashDecoding/Split-KV、Roofline 性能分析；FP16/BF16/FP32 前反向，sm_70–sm_90。**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/open-infra-ai/cuflash/ci.yml?branch=master&style=flat-square&logo=github&label=CI)](https://github.com/open-infra-ai/cuflash/actions/workflows/ci.yml)
-[![CodeQL](https://img.shields.io/github/actions/workflow/status/open-infra-ai/cuflash/codeql.yml?branch=master&style=flat-square&logo=github&label=CodeQL)](https://github.com/open-infra-ai/cuflash/actions/workflows/codeql.yml)
-[![Docs](https://img.shields.io/github/actions/workflow/status/open-infra-ai/cuflash/pages.yml?branch=master&style=flat-square&logo=githubpages&logoColor=white&label=文档)](https://open-infra-ai.github.io/cuflash/)
+[![CI](https://img.shields.io/github/actions/workflow/status/holtwood-systems/cuflash/ci.yml?branch=master&style=flat-square&logo=github&label=CI)](https://github.com/holtwood-systems/cuflash/actions/workflows/ci.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/holtwood-systems/cuflash/codeql.yml?branch=master&style=flat-square&logo=github&label=CodeQL)](https://github.com/holtwood-systems/cuflash/actions/workflows/codeql.yml)
+[![Docs](https://img.shields.io/github/actions/workflow/status/holtwood-systems/cuflash/pages.yml?branch=master&style=flat-square&logo=githubpages&logoColor=white&label=文档)](https://holtwood-systems.github.io/cuflash/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/github/v/release/open-infra-ai/cuflash?style=flat-square&label=版本)](https://github.com/open-infra-ai/cuflash/releases)
+[![Version](https://img.shields.io/github/v/release/holtwood-systems/cuflash?style=flat-square&label=版本)](https://github.com/holtwood-systems/cuflash/releases)
 
-[文档](https://open-infra-ai.github.io/cuflash/) · [API 参考](https://open-infra-ai.github.io/cuflash/api-reference) · [更新日志](CHANGELOG.md)
+[文档](https://holtwood-systems.github.io/cuflash/) · [API 参考](https://holtwood-systems.github.io/cuflash/api-reference) · [更新日志](CHANGELOG.md)
 
 ---
 
@@ -18,7 +18,7 @@
 
 cuflash 是一个**从零手写的 CUDA FlashAttention 深度实现**：从正确起步，经标量内核 → WMMA Tensor Core 前向的优化迭代，形成有数据支撑的性能叙事（教学可读性为底色，内核深度为作品定位，见 [ROADMAP](ROADMAP.md)）。
 
-在 GPU 学习主线（五主仓）中，本仓库负责 CUDA C++ FlashAttention 前向/反向的专项深挖；CUDA 基础、Triton 实现、完整推理运行时和 Serving 控制面分别由其他主仓承担。整体顺序见 [`LEARNING_PATH.md`](https://github.com/open-infra-ai/open-infra-ai/blob/master/LEARNING_PATH.md)（meta 仓）。
+在 GPU 学习主线（五主仓）中，本仓库负责 CUDA C++ FlashAttention 前向/反向的专项深挖；CUDA 基础、Triton 实现、完整推理运行时和 Serving 控制面分别由其他主仓承担。整体顺序见 [`LEARNING_PATH.md`](https://github.com/holtwood-systems/portfolio/blob/master/LEARNING_PATH.md)（meta 仓）。
 
 ### 项目状态
 
@@ -76,9 +76,9 @@ cuflash 是一个**从零手写的 CUDA FlashAttention 深度实现**：从正�
 - 优化叙事与 benchmark（Roofline、kernel 深挖）
 
 **OUT（明确不做，见对应仓库）**：
-- GEMM 基础与 CUDA 编程学习 → [cuda-foundations](https://github.com/open-infra-ai/cuda-foundations)
-- Triton 版算子（参考实现）→ [trifuse](https://github.com/open-infra-ai/trifuse)
-- 完整推理运行时（模型加载/采样/生成）→ [tiny-llm](https://github.com/open-infra-ai/tiny-llm)
+- GEMM 基础与 CUDA 编程学习 → [cuda-foundations](https://github.com/holtwood-systems/cuda-foundations)
+- Triton 版算子（参考实现）→ [trifuse](https://github.com/holtwood-systems/trifuse)
+- 完整推理运行时（模型加载/采样/生成）→ [tiny-llm](https://github.com/holtwood-systems/tiny-llm)
 
 ## 🚀 快速开始
 
@@ -93,7 +93,7 @@ cuflash 是一个**从零手写的 CUDA FlashAttention 深度实现**：从正�
 
 ```bash
 # 克隆仓库
-git clone https://github.com/open-infra-ai/cuflash.git
+git clone https://github.com/holtwood-systems/cuflash.git
 cd cuflash
 
 # 使用预设构建（Release 模式）
@@ -249,11 +249,11 @@ cmake --build --preset release
 
 | 资源 | 链接 |
 |------|------|
-| 📘 **完整文档** | [https://open-infra-ai.github.io/cuflash/](https://open-infra-ai.github.io/cuflash/) |
-| 🔌 **API 参考** | [API 文档](https://open-infra-ai.github.io/cuflash/api-reference) |
-| 🧠 **算法详解** | [深入理解 FlashAttention](https://open-infra-ai.github.io/cuflash/algorithm) |
-| 🔧 **构建指南** | [从源码构建](https://open-infra-ai.github.io/cuflash/building) |
-| ❓ **故障排除** | [常见问题与解决方案](https://open-infra-ai.github.io/cuflash/troubleshooting) |
+| 📘 **完整文档** | [https://holtwood-systems.github.io/cuflash/](https://holtwood-systems.github.io/cuflash/) |
+| 🔌 **API 参考** | [API 文档](https://holtwood-systems.github.io/cuflash/api-reference) |
+| 🧠 **算法详解** | [深入理解 FlashAttention](https://holtwood-systems.github.io/cuflash/algorithm) |
+| 🔧 **构建指南** | [从源码构建](https://holtwood-systems.github.io/cuflash/building) |
+| ❓ **故障排除** | [常见问题与解决方案](https://holtwood-systems.github.io/cuflash/troubleshooting) |
 
 ---
 

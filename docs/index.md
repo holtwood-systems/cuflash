@@ -15,7 +15,7 @@ hero:
       link: /guide/quick-start
     - theme: alt
       text: 查看源码
-      link: https://github.com/open-infra-ai/cuflash
+      link: https://github.com/holtwood-systems/cuflash
 ---
 
 <script setup>
@@ -400,7 +400,7 @@ const features = [
 ::: code-group
 
 ```bash [克隆 & 构建]
-git clone https://github.com/open-infra-ai/cuflash.git
+git clone https://github.com/holtwood-systems/cuflash.git
 cd cuflash
 
 cmake --preset release

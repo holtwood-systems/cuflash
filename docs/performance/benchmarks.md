@@ -263,7 +263,7 @@ PyTorch 2.2 的 `torch.nn.functional.scaled_dot_product_attention` 默认优先�
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/open-infra-ai/cuflash.git
+git clone https://github.com/holtwood-systems/cuflash.git
 cd cuflash
 
 # 2. 使用 CMake Preset 构建 benchmark 目标

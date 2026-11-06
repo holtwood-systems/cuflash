@@ -47,7 +47,7 @@ g++ --version
 
 ```bash
 # 克隆仓库
-git clone https://github.com/open-infra-ai/cuflash.git
+git clone https://github.com/holtwood-systems/cuflash.git
 cd cuflash
 
 # 使用 preset 构建（推荐）

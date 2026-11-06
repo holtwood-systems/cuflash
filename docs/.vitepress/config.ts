@@ -33,8 +33,8 @@ const nav = [
     text: '项目',
     items: [
       { text: '项目状态', link: '/project-status' },
-      { text: '发布版本', link: 'https://github.com/open-infra-ai/cuflash/releases' },
-      { text: '仓库源码', link: 'https://github.com/open-infra-ai/cuflash' }
+      { text: '发布版本', link: 'https://github.com/holtwood-systems/cuflash/releases' },
+      { text: '仓库源码', link: 'https://github.com/holtwood-systems/cuflash' }
     ]
   }
 ]
@@ -113,14 +113,14 @@ export default withMermaid(defineConfig({
     outline: { label: '本页目录', level: 'deep' },
     docFooter: { prev: '上一页', next: '下一页' },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/open-infra-ai/cuflash' }
+      { icon: 'github', link: 'https://github.com/holtwood-systems/cuflash' }
     ],
     footer: {
       message: '稳定 v0.6.0 · 从零手写的 CUDA FlashAttention',
-      copyright: 'Copyright 2026 open-infra-ai.'
+      copyright: 'Copyright 2026 Holtwood Systems.'
     },
     editLink: {
-      pattern: 'https://github.com/open-infra-ai/cuflash/edit/master/docs/:path',
+      pattern: 'https://github.com/holtwood-systems/cuflash/edit/master/docs/:path',
       text: '在 GitHub 上编辑此页面'
     },
     lastUpdated: {

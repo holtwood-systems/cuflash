@@ -14,7 +14,7 @@
 ### 克隆仓库
 
 ```bash
-git clone https://github.com/open-infra-ai/cuflash.git
+git clone https://github.com/holtwood-systems/cuflash.git
 cd cuflash
 ```
 

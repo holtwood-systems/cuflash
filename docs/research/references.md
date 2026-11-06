@@ -373,9 +373,9 @@
 ```bibtex
 @software{cuflashattn2024,
   title={cuflash: From-Scratch {CUDA} {C++} {FlashAttention} Reference Library},
-  author={{open-infra-ai}},
+  author={{Holtwood Systems}},
   year={2024},
-  url={https://github.com/open-infra-ai/cuflash},
+  url={https://github.com/holtwood-systems/cuflash},
   note={Version 0.5.0, stable baseline}
 }
 ```
