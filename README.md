@@ -27,6 +27,21 @@ cuflash 是一个**从零手写的 CUDA FlashAttention 深度实现**：从正�
 - **定位**：从零手写的 kernel 深度作品——教学可读性为底色，优化迭代叙事为定位（见 [ROADMAP](ROADMAP.md)）
 - **当前重点**：删除过时流程层、收紧文档并修复长尾缺陷，而不是扩展新功能
 
+### ⚡ 核心亮点（30 秒速览）
+
+| 维度 | 内容 |
+|------|------|
+| **内核矩阵** | 标量 kernel（FP32 / 回退路径）+ WMMA Tensor Core 前向（FP16 `sm_70+` / BF16 `sm_80+`，`m16n16k16`，FP32 accumulate）+ FlashDecoding/Split-KV + 完整反向 |
+| **算法** | tiling + online softmax + FA2 延迟归一化：不物化 O(N²) 注意力矩阵，辅助内存 O(N)，反向复用 L=logsumexp |
+| **代码规模** | ~2.8K 行核心 CUDA 实现（`src/` + `include/`），770 行 Google Benchmark |
+| **正确性验证** | 11 个单元测试文件（数值稳定性/causal mask/dtype/边界压力）+ 集成测试 + PyTorch SDPA 对比测试 + compute-sanitizer |
+| **架构覆盖** | sm_70（V100）→ sm_90（H100），实测硬件 sm_86 |
+| **实测快照** | RTX 3060 Laptop：FP16 Tensor Core 前向 seq=4096/d=64 **23.5 ms**，同形状 FP32 标量 **177 ms**（约 **7.5×**，同仓库同硬件对比，详见 [性能](#-性能)） |
+
+> 数字口径：所有性能数字均标注硬件与环境，完整协议与约束见
+> [docs/performance/benchmarks.md](docs/performance/benchmarks.md)。本仓库遵循
+> 「每个数字必须可复现、可归档」的证据标准，不引用无原始产物支持的跨 GPU 历史数据。
+
 ### 为什么选择 cuflash？
 
 | 挑战 | 解决方案 |
@@ -79,6 +94,41 @@ cuflash 是一个**从零手写的 CUDA FlashAttention 深度实现**：从正�
 - GEMM 基础与 CUDA 编程学习 → [cuda-foundations](https://github.com/holtwood-systems/cuda-foundations)
 - Triton 版算子（参考实现）→ [trifuse](https://github.com/holtwood-systems/trifuse)
 - 完整推理运行时（模型加载/采样/生成）→ [tiny-llm](https://github.com/holtwood-systems/tiny-llm)
+
+## 🏗️ 架构与实现
+
+### 内核分层
+
+```
+                cuflash::flash_attention_forward   （API 层：src/api/）
+                        │  参数校验 / dtype 分派 / launch 配置
+        ┌───────────────┴────────────────┐
+        ▼                                ▼
+  WMMA Tensor Core 路径              标量 kernel 路径
+  (FP16 sm_70+ / BF16 sm_80+)        (FP32，及其他架构回退)
+  S = Q·Kᵀ 与 O += P·V 走            纯 CUDA core，
+  m16n16k16 fragment，               与 WMMA 共享同一套
+  FP32 accumulate                    online softmax 逻辑
+        └───────────────┬────────────────┘
+                        ▼
+      online softmax + FA2 延迟归一化（src/kernels/online_softmax.cu）
+      逐 K/V 块更新 m、l，O 累加后延迟除以 l；L = m + log(l) 落盘，
+      反向据此重计算 P，避免保存 O(N²) 中间矩阵
+                        ▼
+      decode 场景（query_len = 1）：FlashDecoding / Split-KV
+      Phase 1 各 KV chunk 并行计算局部 (m, l, O)
+      → Phase 2 按 flash rescaling 规则归并：m = max m_c，
+        l = Σ l_c·e^{m_c−m}，O = Σ O_c·e^{m_c−m} / l
+```
+
+### 关键实现事实
+
+- **Q/K/V tile 常驻 shared memory**：`BLOCK_M × HEAD_DIM` / `BLOCK_N × HEAD_DIM` 布局，`extern __shared__` 一次性划分（见 [`flash_attention_forward_wmma.cu`](src/forward/flash_attention_forward_wmma.cu)）。
+- **launch 越界修复**：grid 展平到一维（`num_q_blocks × batch_heads`），避免 `B*H > 65535` 时超出 `gridDim.y` 上限——附带回归测试（ROADMAP E2a）。
+- **多精度一条管线**：FP32/FP16/BF16 通过 `TypeAdapter` 走同一 kernel 模板，BF16 fragment 需 `sm_80+`，不满足时 launcher 自动回退标量路径。
+- **完整反向**：`src/backward/flash_attention_backward_typed.cu`（600 行），dQ/dK/dV 全路径，数值稳定性由专项测试覆盖。
+
+深度解读见文档站：[算法详解](docs/algorithm.md) · [内核深潜](docs/design/kernel-deep-dive.md) · [FlashDecoding 设计](docs/design/flash-decoding.md) · [Roofline 分析](docs/performance/roofline-analysis.md)
 
 ## 🚀 快速开始
 
@@ -240,6 +290,52 @@ cmake --preset release
 cmake --build --preset release
 ./build/release/cuflash_bench
 ```
+
+### 本机实测快照（RTX 3060 Laptop，sm_86，2026-08-18，commit `6860cbc`）
+
+> **非正式快照**：未归档成套原始 JSON，仅作 sanity check 与量级参考；
+> 环境、复现命令与完整表格见 [benchmarks.md §1.5](docs/performance/benchmarks.md)。
+> 配置：batch=1, heads=8，CUDA Event kernel-only 计时，10 预热 + 30 采样中位数。
+
+| 形状 | FP16 (Tensor Core) | FP32 (标量) | FP32 causal |
+|:----:|:------------------:|:-----------:|:-----------:|
+| seq=1024, d=64 | 1.76 ms | 12.0 ms | 4.55 ms |
+| seq=4096, d=64 | **23.5 ms** | 177 ms | 56.7 ms |
+| seq=4096, d=128 | 84.1 ms | 379 ms | 186 ms |
+
+读法：同一仓库、同一硬件下，Tensor Core 路径相对标量路径约 **7.5×**（23.5 vs 177 ms）——
+这是「优化迭代叙事」的直接证据；绝对值与 PyTorch SDPA 的对比口径见完整文档，本仓库
+不把教学级实现包装成生产级性能。
+
+### 姊妹实现对照：Triton 版（RTX 4090 实测）
+
+同一 FlashAttention 学习主线上，[trifuse](https://github.com/holtwood-systems/trifuse)
+提供 Triton 参考实现（分块 + online softmax + exp2 折叠 + causal 对角短路），
+2026-11 在 2×RTX 4090 48GB 上实测：
+
+| 配置（seq=16K, BF16） | Triton FA-2 | 参照 |
+|---|---|---|
+| causal vs naive PyTorch 实现 | **24.7×** 加速 | 峰值显存 17.35 GB → **0.19 GB**（约 91×） |
+| causal vs PyTorch SDPA (flash 后端) | 3.90 ms vs 3.70 ms（~95% 持平） | vs SDPA 最大误差 4.9e-04 |
+| 非 causal vs SDPA | 6.52 ms vs 6.70 ms（**反超 ~3%**） | 同上 |
+
+两个实现互为印证：**Triton 用于算法快速验证**（online softmax、exp2 折叠等技巧的迭代），
+**CUDA C++ 版下沉到 Tensor Core 管线与完整反向**。面试中可讲清两条路径的取舍——
+这也正是上文「项目边界（IN / OUT）」划分的由来。
+
+## 🎯 面试考点映射
+
+| 高频面试题 | 本仓库的对应物 |
+|-----------|---------------|
+| FlashAttention 为什么快？显存为什么是 O(N)？ | 不减 FLOPs、减 HBM 读写（O(N²)→O(N)）；[算法详解](docs/algorithm.md) 有读写量推导 |
+| 推导 online softmax：两块拼接送进来时 m/l 怎么更新？ | [`src/kernels/online_softmax.cu`](src/kernels/online_softmax.cu) + 单元测试 |
+| FA2 的延迟归一化（deferred normalization）是什么？ | 前向只落盘 O 与 L=logsumexp，反向据此重算 P，不保存注意力矩阵 |
+| WMMA / Tensor Core 怎么编程？ | [`flash_attention_forward_wmma.cu`](src/forward/flash_attention_forward_wmma.cu)：m16n16k16 fragment、FP32 accumulate、warp 级 Q 行分配 |
+| decode 阶段为什么慢？Split-KV 怎么做？ | Q=1 时每 token 要扫全部 KV；[`flash_decoding.cu`](src/forward/flash_decoding.cu) 两阶段归并 + [设计文档](docs/design/flash-decoding.md) |
+| 数值稳定性怎么验证？ | [`test_numerical_stability.cu`](tests/unit/test_numerical_stability.cu)、dtype/causal mask/边界压力测试 |
+| CUDA 工程坑（launch 上限、shared memory 布局）？ | `B*H > 65535` 的 `gridDim.y` 越界修复 + 回归测试（ROADMAP E2a） |
+| 优化无效怎么办？（负结果文化） | [causal-boundary-skip.md](docs/performance/causal-boundary-skip.md)：边界块特化实测 ±2%，诚实记录为噪声内负结果，不改写成加速 |
+| 为什么比 PyTorch SDPA 慢？差距来自哪？ | 教学实现 vs cuDNN 生产管线的差距来源（warp specialization、TMA），以及追赶路径（[kernel-deep-dive](docs/design/kernel-deep-dive.md)） |
 
 ---
 
