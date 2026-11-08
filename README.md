@@ -295,7 +295,7 @@ cmake --build --preset release
 
 > **非正式快照**：未归档成套原始 JSON，仅作 sanity check 与量级参考；
 > 环境、复现命令与完整表格见 [benchmarks.md §1.5](docs/performance/benchmarks.md)。
-> 配置：batch=1, heads=8，CUDA Event kernel-only 计时，10 预热 + 30 采样中位数。
+> 配置：batch=1, heads=8，CUDA Event kernel-only 计时，Google Benchmark 自适应迭代（无固定预热）。
 
 | 形状 | FP16 (Tensor Core) | FP32 (标量) | FP32 causal |
 |:----:|:------------------:|:-----------:|:-----------:|

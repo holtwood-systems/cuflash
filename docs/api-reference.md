@@ -494,6 +494,12 @@ FP16/BF16 的 WMMA 前向 tile 更小（hd64 为 64×32）。
 - 使用不同流并发调用时完全线程安全
 - 无共享可变状态
 
+### 解码（FlashDecoding）
+- partials scratch 每次调用通过 `cudaMallocAsync` 在调用者的 stream 上分配，
+  `cudaFreeAsync` 同流归还；不同流 / 设备并发调用不共享缓冲区
+- 设备不支持 stream-ordered allocator 时退回 `cudaMalloc` +
+  `cudaStreamSynchronize` + `cudaFree`，该退化路径会在返回前同步
+
 ### 反向传播
 - 使用内部静态工作空间进行中间缓冲区分配
 - 对于单线程 CUDA context 使用（常见情况）是**线程安全的**

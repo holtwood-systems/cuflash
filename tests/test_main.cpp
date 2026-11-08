@@ -5,6 +5,10 @@
 
 namespace {
 
+// CTest 约定的 skip 返回码；与 CMakeLists.txt 中 cuflash_tests 的
+// SKIP_RETURN_CODE 保持一致。
+constexpr int kCtestSkipReturnCode = 77;
+
 bool is_listing_tests(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--gtest_list_tests") == 0) {
@@ -46,5 +50,13 @@ int main(int argc, char** argv) {
         ::testing::AddGlobalTestEnvironment(new GpuRequirementEnvironment);
     }
 
-    return RUN_ALL_TESTS();
+    const int result = RUN_ALL_TESTS();
+
+    // gtest 把全局 environment 的 GTEST_SKIP() 当作“没有测试运行”，
+    // 退出码仍是 0，CTest 会把整轮报成 Passed。返回 skip 码让无 GPU
+    // 的 CI 明确显示 Skipped，而不是伪装成全绿。
+    if (!listing_tests && result == 0 && !cuda_device_available()) {
+        return kCtestSkipReturnCode;
+    }
+    return result;
 }

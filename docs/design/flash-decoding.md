@@ -49,8 +49,11 @@ O = Σ_c O_c · exp(m_c - m) / l
 L[bh] = m + log(l)
 ```
 
-跨块归约用全局 scratch（`[num_chunks, bh_total]` 布局，函数级 static
-缓冲复用，避免 decode 每步 `cudaMalloc`）。
+跨块归约用全局 scratch（`[num_chunks, bh_total]` 布局）。每次调用在调用者
+的 stream 上通过 `cudaMallocAsync` 从设备内存池取一块，combine kernel 之后
+用 `cudaFreeAsync` 同流归还；不同 stream / 设备的并发 decode 不会共享或
+覆盖彼此的 partials。不支持 stream-ordered allocator 的设备退回
+`cudaMalloc`，并在释放前 `cudaStreamSynchronize`。
 
 ## 4. 数值正确性
 

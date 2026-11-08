@@ -220,20 +220,22 @@ FlashAttentionError launch_flash_decoding_typed(const InputT* Q, const InputT* K
     const int bh_total = batch_size * num_heads;
 
     // Scratch for partials: [num_chunks, bh_total] for m/l, [num_chunks, bh_total, D] for O.
-    // 函数级 static：避免 decode 每步 cudaMalloc；不够大时重新分配（单流假设）。
+    // 每次调用独立分配，并用 stream-ordered 分配器绑定到调用者的 stream。
+    // 旧的函数级 static 缓存被所有 stream/设备共享：两个并发 decode 会互相
+    // 覆盖 partials，设备 A 分配的指针也可能被设备 B 复用。cudaMallocAsync
+    // 从内存池取块，仍能避免每步 cudaMalloc 的同步开销。
     const size_t partial_m_size = static_cast<size_t>(num_chunks) * bh_total;
     const size_t partial_o_size = partial_m_size * head_dim;
     const size_t need_bytes = (partial_o_size + 2 * partial_m_size) * sizeof(float);
-    static float* scratch = nullptr;
-    static size_t scratch_bytes = 0;
-    if (scratch == nullptr || scratch_bytes < need_bytes) {
-        if (scratch != nullptr)
-            cudaFree(scratch);
+    float* scratch = nullptr;
+    bool scratch_from_pool = true;
+    if (cudaMallocAsync(&scratch, need_bytes, stream) != cudaSuccess) {
+        // 老设备/驱动不支持 stream-ordered allocator：退回同步分配。
+        scratch_from_pool = false;
+        (void)cudaGetLastError();
         if (cudaMalloc(&scratch, need_bytes) != cudaSuccess) {
-            scratch = nullptr;
             return FlashAttentionError::CUDA_ERROR;
         }
-        scratch_bytes = need_bytes;
     }
     float* partial_o = scratch;
     float* partial_m = partial_o + partial_o_size;
@@ -270,6 +272,20 @@ FlashAttentionError launch_flash_decoding_typed(const InputT* Q, const InputT* K
         flash_decoding_combine_kernel<InputT, 128>
             <<<combine_grid, kDecodeThreads, shared_combine, stream>>>(
                 partial_o, partial_m, partial_l, O, L, num_chunks, bh_total);
+    }
+
+    if (scratch_from_pool) {
+        // 与 partial/combine 两次 launch 同 stream 排队，内核结束后才归还。
+        if (cudaFreeAsync(scratch, stream) != cudaSuccess) {
+            return FlashAttentionError::CUDA_ERROR;
+        }
+    } else {
+        // 同步分配的内存不参与 stream 排序，必须先等内核读完 partials。
+        cudaError_t sync_err = cudaStreamSynchronize(stream);
+        cudaFree(scratch);
+        if (sync_err != cudaSuccess) {
+            return FlashAttentionError::CUDA_ERROR;
+        }
     }
 
     return FlashAttentionError::SUCCESS;

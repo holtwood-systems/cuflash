@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- 2026-11-08 FlashDecoding 的 partials scratch 不再使用函数级 `static`
+  缓冲。旧实现被所有 stream / 设备共享：不同流并发 decode 会互相覆盖
+  partials，设备 A 分配的指针可能被设备 B 使用，扩容时 `cudaFree` 还可能
+  释放另一条流仍在读写的块。现改为每次调用在调用者 stream 上
+  `cudaMallocAsync` / `cudaFreeAsync`；不支持 stream-ordered allocator 的
+  设备退回 `cudaMalloc` + `cudaStreamSynchronize` + `cudaFree`。
+  `docs/design/flash-decoding.md` 与 `docs/api-reference.md` 同步；新增
+  `ConcurrentStreamsKeepIndependentScratch` 双 stream 回归（20 次交替、
+  num_chunks 4/8、不逐步同步）。
+- 2026-11-08 无 GPU 的 CI 不再把 GPU 用例显示为 Passed。`tests/test_main.cpp`
+  在 `cudaGetDeviceCount` 为 0 时返回 CTest 的 skip 码 77，
+  `gtest_discover_tests` 设置 `SKIP_RETURN_CODE 77`；CTest 现在把 67 个
+  发现式用例标为 Skipped，而不是全绿。`--gtest_list_tests` 仍返回 0，
+  不影响构建期发现。
+- 2026-11-08 复验文档与实际 harness 对齐：`benchmarks.md` 的复验命令路径从
+  `build/release/bench/cuflash_bench` 改为 preset 实际输出
+  `build/release/cuflash_bench`；删除匹配 0 个用例的
+  `BM_FlashAttention_Forward.*` 过滤器，改为全量运行并提供可选
+  `--benchmark_repetitions=30` 聚合命令；删除不存在的“10 预热 + 30 采样
+  中位数”口径，改为 Google Benchmark 自适应迭代（归档命令为
+  `--benchmark_min_time=0.5s`）。README 与 benchmarks.md §1.5 同步。
+- 未改动 benchmark harness 与已归档结果；本项只修正复验命令与统计口径描述。
+
 ## [0.6.0] - 2026-08-27
 
 ### Changed（构建接口，breaking）

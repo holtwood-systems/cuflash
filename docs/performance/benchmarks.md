@@ -40,8 +40,9 @@
 - **head_dim**: 固定为 64（本实现支持 32、64、128）
 - **Q/K/V 布局**: `[batch_size, num_heads, seq_len, head_dim]`
 - **计时方式**: Google Benchmark `Benchmark::UseManualTime()`，CUDA Event 统计 kernel-only 耗时
-- **预热迭代**: 10 次
-- **正式采样**: 30 次（取中位数）
+- **迭代次数**: Google Benchmark 自适应（`--benchmark_min_time`，归档命令为 `0.5s`）；
+  harness 没有固定预热循环。需要中位数时显式加
+  `--benchmark_repetitions=30 --benchmark_report_aggregates_only=true`。
 - **内存统计**: `cudaMemGetInfo` 前后差值 + `nvidia-smi dmon` 交叉验证
 
 ### 1.4 编译参数
@@ -67,7 +68,7 @@ cmake --build --preset release --target cuflash_bench
 | CUDA Toolkit | 12.0（nvcc 12.0.140） |
 | 本仓库 commit | `6860cbc` |
 | 编译 | `cmake --preset release && cmake --build --preset release -j`（默认 arch `80;86`） |
-| 配置 | batch=1, heads=8, kernel-only 耗时（CUDA Event），10 预热 + 30 采样中位数 |
+| 配置 | batch=1, heads=8, kernel-only 耗时（CUDA Event），Google Benchmark 自适应迭代（无固定预热） |
 
 **复现命令**：
 
@@ -270,15 +271,21 @@ cd cuflash
 cmake --preset release -DBUILD_BENCHMARKS=ON
 cmake --build --preset release --target cuflash_bench
 
-# 3. 运行全量 benchmark（约 20–30 分钟）
-./build/release/bench/cuflash_bench \
+# 3. 运行全量 benchmark（约 20–30 分钟；Google Benchmark 自适应迭代）
+./build/release/cuflash_bench \
   --benchmark_time_unit=ms \
-  --benchmark_repetitions=30 \
-  --benchmark_report_aggregates_only=true \
-  --benchmark_filter="BM_FlashAttention_Forward.*"
+  --benchmark_min_time=0.5s
 
-# 4. 导出 JSON 供后续分析
-./build/release/bench/cuflash_bench \
+# 4. 如需 30 次重复的中位数，加聚合参数（结果口径与单轮不同）
+./build/release/cuflash_bench \
+  --benchmark_time_unit=ms \
+  --benchmark_min_time=0.5s \
+  --benchmark_repetitions=30 \
+  --benchmark_report_aggregates_only=true
+
+# 5. 导出 JSON 供后续分析
+./build/release/cuflash_bench \
+  --benchmark_min_time=0.5s \
   --benchmark_out=results.json \
   --benchmark_out_format=json
 ```
@@ -306,7 +313,7 @@ COPY . /workspace/cuflash
 RUN cmake --preset release -DBUILD_BENCHMARKS=ON \
     && cmake --build --preset release --target cuflash_bench
 
-CMD ["./build/release/bench/cuflash_bench"]
+CMD ["./build/release/cuflash_bench"]
 ```
 
 ```bash

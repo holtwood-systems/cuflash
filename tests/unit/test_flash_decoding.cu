@@ -235,6 +235,85 @@ TEST_F(FlashDecodingTest, MatchesCpuReferenceHalf) {
     cudaFree(dL);
 }
 
+TEST_F(FlashDecodingTest, ConcurrentStreamsKeepIndependentScratch) {
+    // 回归：旧实现用函数级 static scratch 缓存 partials，两条 stream 并发
+    // decode 会共用同一块 [num_chunks, bh, D] 缓冲；第二次调用（尤其扩容
+    // 时）会覆盖或 cudaFree 第一次仍在读写的块，输出静默错误。
+    const int batch_size = 1;
+    const int num_heads = 4;
+    const int seq_len = 512;
+    const int head_dim = 64;
+    const float scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
+    const int bh = batch_size * num_heads;
+
+    const auto Qa = random_f32(bh * head_dim, 40);
+    const auto Ka = random_f32(bh * seq_len * head_dim, 41);
+    const auto Va = random_f32(bh * seq_len * head_dim, 42);
+    const auto Qb = random_f32(bh * head_dim, 43);
+    const auto Kb = random_f32(bh * seq_len * head_dim, 44);
+    const auto Vb = random_f32(bh * seq_len * head_dim, 45);
+
+    std::vector<float> refA(bh * head_dim), refB(bh * head_dim);
+    reference_attention_decode(Qa, Ka, Va, refA, batch_size, num_heads, seq_len, head_dim, scale);
+    reference_attention_decode(Qb, Kb, Vb, refB, batch_size, num_heads, seq_len, head_dim, scale);
+
+    float *dQa = nullptr, *dKa = nullptr, *dVa = nullptr, *dOa = nullptr, *dLa = nullptr;
+    float *dQb = nullptr, *dKb = nullptr, *dVb = nullptr, *dOb = nullptr, *dLb = nullptr;
+    cudaMalloc(&dQa, Qa.size() * sizeof(float));
+    cudaMalloc(&dKa, Ka.size() * sizeof(float));
+    cudaMalloc(&dVa, Va.size() * sizeof(float));
+    cudaMalloc(&dOa, refA.size() * sizeof(float));
+    cudaMalloc(&dLa, bh * sizeof(float));
+    cudaMalloc(&dQb, Qb.size() * sizeof(float));
+    cudaMalloc(&dKb, Kb.size() * sizeof(float));
+    cudaMalloc(&dVb, Vb.size() * sizeof(float));
+    cudaMalloc(&dOb, refB.size() * sizeof(float));
+    cudaMalloc(&dLb, bh * sizeof(float));
+    cudaMemcpy(dQa, Qa.data(), Qa.size() * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(dKa, Ka.data(), Ka.size() * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(dVa, Va.data(), Va.size() * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(dQb, Qb.data(), Qb.size() * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(dKb, Kb.data(), Kb.size() * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(dVb, Vb.data(), Vb.size() * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaStream_t stream_a = nullptr;
+    cudaStream_t stream_b = nullptr;
+    ASSERT_EQ(cudaStreamCreate(&stream_a), cudaSuccess);
+    ASSERT_EQ(cudaStreamCreate(&stream_b), cudaSuccess);
+
+    // 两条 stream 交替发起、不同 num_chunks（强制不同 scratch 尺寸），
+    // 不逐步同步，让 partial/combine kernel 真正重叠。
+    for (int iter = 0; iter < 20; ++iter) {
+        ASSERT_EQ(flash_attention_decode(dQa, dKa, dVa, dOa, dLa, batch_size, num_heads, seq_len,
+                                         head_dim, scale, 4, stream_a),
+                  FlashAttentionError::SUCCESS);
+        ASSERT_EQ(flash_attention_decode(dQb, dKb, dVb, dOb, dLb, batch_size, num_heads, seq_len,
+                                         head_dim, scale, 8, stream_b),
+                  FlashAttentionError::SUCCESS);
+    }
+    ASSERT_EQ(cudaStreamSynchronize(stream_a), cudaSuccess);
+    ASSERT_EQ(cudaStreamSynchronize(stream_b), cudaSuccess);
+
+    std::vector<float> outA(refA.size()), outB(refB.size());
+    cudaMemcpy(outA.data(), dOa, outA.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(outB.data(), dOb, outB.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    EXPECT_LT(max_abs_diff(outA, refA), 1e-3f) << "stream A output corrupted by stream B";
+    EXPECT_LT(max_abs_diff(outB, refB), 1e-3f) << "stream B output corrupted by stream A";
+
+    cudaStreamDestroy(stream_a);
+    cudaStreamDestroy(stream_b);
+    cudaFree(dQa);
+    cudaFree(dKa);
+    cudaFree(dVa);
+    cudaFree(dOa);
+    cudaFree(dLa);
+    cudaFree(dQb);
+    cudaFree(dKb);
+    cudaFree(dVb);
+    cudaFree(dOb);
+    cudaFree(dLb);
+}
+
 TEST_F(FlashDecodingTest, InvalidArgumentsReturnError) {
     float dummy = 0.0f;
     float* null_ptr = nullptr;  // 类型化空指针（O/L 为 float*，消歧 3 个 dtype 重载）

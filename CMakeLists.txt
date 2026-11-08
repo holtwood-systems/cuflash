@@ -193,7 +193,11 @@ if(BUILD_TESTS)
         add_test(NAME cuflash_api_smoke COMMAND cuflash_api_smoke)
 
         include(GoogleTest)
-        gtest_discover_tests(cuflash_tests DISCOVERY_TIMEOUT 60)
+        # 无 GPU 时 test_main.cpp 返回 77，让 CTest 把发现式用例标成
+        # Skipped 而不是 Passed（gtest 自身对全局 skip 仍退出 0）。
+        gtest_discover_tests(cuflash_tests
+            DISCOVERY_TIMEOUT 60
+            PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 
     add_custom_target(check
