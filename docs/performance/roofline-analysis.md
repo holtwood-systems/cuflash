@@ -170,7 +170,8 @@ sequence-parallel 把 K/V 重载降下来，才能把 $AI$ 提高到 ridge point
 > **面试核心论点**: FlashAttention 的优化目标不是"变成 compute-bound"，而是"在
 > memory-bound 中做到最好"——工作内存从 $O(N^2)$ 降到 $O(N)$，使大 $N$ 变得可行；
 > 但**要诚实地指出**：固定 tile 的实现 HBM 流量仍是 $O(N^2)$，进一步减少 K/V 重载
-> 需要 split-KV（本仓库未实现）。
+> 需要 split-KV（本仓前向路径未使用；decode 侧另有 `src/forward/flash_decoding.cu`
+> 的 Split-KV 实现，属不同路径，不能据此声称前向已具备该优化）。
 
 ---
 
