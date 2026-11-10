@@ -10,14 +10,14 @@ name: GPU
 #   - CUDA toolkit (nvcc, cudart, compute-sanitizer) on PATH
 #   - CMake >= 3.20, Ninja, a C++17 host compiler, Python 3
 #
-# Until such a runner is registered this workflow stays queued; trigger it
-# manually with workflow_dispatch once hardware is available.
+# No such runner is currently registered, so this workflow is manual-only:
+# a weekly schedule would just produce queued-then-cancelled runs that look
+# like a flaky gate on the public Actions page. Trigger it manually with
+# workflow_dispatch once hardware is available; see the agent note
+# 2026-11-10-gpu-ci-manual-trigger.md before re-adding a schedule.
 
 on:
   workflow_dispatch:
-  schedule:
-    # Weekly, Monday early morning (off-minute to avoid fleet contention).
-    - cron: '17 5 * * 1'
 
 permissions:
   contents: read
